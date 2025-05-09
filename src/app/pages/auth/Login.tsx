@@ -5,6 +5,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import axios from 'axios';
 
+// Create axios instance with custom config
+const api = axios.create({
+  baseURL: 'https://test-fe.mysellerpintar.com/api',
+  timeout: 10000,
+  headers: {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
+  }
+});
+
 export default function Login() {
   const [formData, setFormData] = useState({
     username: '',
@@ -39,17 +49,27 @@ export default function Login() {
     if (!validate()) return;
     setLoading(true);
     try {
-      const response = await axios.post('https://test-fe.mysellerpintar.com/api/auth/login', {
+      const response = await api.post('/auth/login', {
         username: formData.username,
         password: formData.password
       });
 
-      if (response.data.token) {
+      console.log('Login response:', response.data); // Add logging for debugging
+
+      if (response.data && response.data.token) {
         // Store the token in localStorage
         localStorage.setItem('token', response.data.token);
         
+        // Store additional user info
+        if (response.data.username) {
+          localStorage.setItem('username', response.data.username);
+        }
+        if (response.data.role) {
+          localStorage.setItem('role', response.data.role);
+        }
+        
         // Get user role from the response
-        const userRole = response.data.role; // Assuming the API returns the role in the response
+        const userRole = response.data.role;
         
         // Redirect based on role
         if (userRole === 'Admin') {
@@ -57,12 +77,34 @@ export default function Login() {
         } else {
           router.push('/dashboard');
         }
+      } else {
+        throw new Error('Invalid response format');
       }
     } catch (err) {
+      console.error('Login error:', err); // Add error logging
+      
       if (axios.isAxiosError(err)) {
+        if (err.code === 'ECONNABORTED') {
+          setErrors({
+            username: 'Request timeout. Please try again.',
+            password: 'Request timeout. Please try again.'
+          });
+        } else if (!err.response) {
+          setErrors({
+            username: 'Network error. Please check your connection.',
+            password: 'Network error. Please check your connection.'
+          });
+        } else {
+          const errorMessage = err.response?.data?.message || 'Invalid username or password';
+          setErrors({
+            username: errorMessage,
+            password: errorMessage
+          });
+        }
+      } else {
         setErrors({
-          username: 'Invalid username or password',
-          password: 'Invalid username or password'
+          username: 'An unexpected error occurred',
+          password: 'An unexpected error occurred'
         });
       }
     } finally {
